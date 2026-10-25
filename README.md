@@ -16,7 +16,13 @@ properties a trustworthy task should have and explains how to fix the ones that 
 - the reference solution passes every time;
 - difficulty is calibrated for training.
 
-Status: early. Only the statistics helpers work today; `hackproof audit` arrives in phase 2.
+Status: early. Today Hackproof parses [Harbor](https://docs.harborframework.com) tasks
+(`hackproof inspect`) and ships the statistics the checks will use; `hackproof audit` arrives in
+phase 2. Scope and assumptions: [docs/threat-model.md](docs/threat-model.md).
+
+```bash
+uv run hackproof inspect tests/fixtures/harbor
+```
 
 ## Development
 
