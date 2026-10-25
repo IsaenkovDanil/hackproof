@@ -1,0 +1,12 @@
+# Minimal Harbor task used as a test fixture. Field names follow the public Harbor docs and will
+# be aligned with the framework's schema once docs/research/harbor-internals.md is written.
+
+[metadata]
+difficulty = "easy"
+category = "shell"
+
+[agent]
+timeout_sec = 120
+
+[verifier]
+timeout_sec = 60
