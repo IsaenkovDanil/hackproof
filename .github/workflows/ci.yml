@@ -25,3 +25,16 @@ jobs:
           uv run ruff format --check .
       - name: Test
         run: uv run pytest -q
+
+  crosscheck:
+    name: crosscheck (SciPy, statsmodels)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: uv sync --locked
+      - name: Cross-check statistics against reference libraries
+        run: uv run --with scipy --with statsmodels --with hypothesis pytest tests/crosscheck -q

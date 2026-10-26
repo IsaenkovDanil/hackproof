@@ -30,6 +30,8 @@ def wilson_interval(events: int, n: int, z: float = Z95) -> tuple[float, float]:
     interval it stays honest when events == 0 or events == n.
     """
     _check_counts(events, n)
+    if not (math.isfinite(z) and z > 0):
+        raise ValueError(f"z must be a positive finite number, got {z}")
     p_hat = events / n
     z2 = z * z
     denom = 1 + z2 / n
@@ -80,8 +82,11 @@ class BetaPosterior:
     beta: int
 
     def __post_init__(self) -> None:
-        if self.alpha < 1 or self.beta < 1:
-            raise ValueError("alpha and beta must be integers >= 1")
+        for name, value in (("alpha", self.alpha), ("beta", self.beta)):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name} must be an integer, got {value!r}")
+            if value < 1:
+                raise ValueError(f"{name} must be >= 1, got {value}")
 
     @classmethod
     def from_counts(cls, successes: int, n: int, prior: tuple[int, int] = (1, 1)) -> BetaPosterior:
@@ -91,6 +96,10 @@ class BetaPosterior:
     def mean(self) -> float:
         return self.alpha / (self.alpha + self.beta)
 
+    def _binom_sum(self, x: float, js: range) -> float:
+        m = self.alpha + self.beta - 1
+        return math.fsum(math.exp(_log_binom_pmf(m, j, x)) for j in js)
+
     def cdf(self, x: float) -> float:
         """P(p <= x) under this posterior."""
         if x <= 0.0:
@@ -98,19 +107,49 @@ class BetaPosterior:
         if x >= 1.0:
             return 1.0
         m = self.alpha + self.beta - 1
-        total = 0.0
-        for j in range(self.alpha, m + 1):
-            total += math.exp(_log_binom_pmf(m, j, x))
-        return min(1.0, total)
+        return min(1.0, self._binom_sum(x, range(self.alpha, m + 1)))
 
-    def quantile(self, q: float, tol: float = 1e-10) -> float:
-        """Smallest x with cdf(x) >= q, by bisection."""
+    def sf(self, x: float) -> float:
+        """P(p > x), summed directly so it stays accurate when cdf(x) is close to 1."""
+        if x <= 0.0:
+            return 1.0
+        if x >= 1.0:
+            return 0.0
+        return min(1.0, self._binom_sum(x, range(0, self.alpha)))
+
+    def quantile(self, q: float, tol: float = 1e-10, max_iter: int = 200) -> float:
+        """Smallest x with cdf(x) >= q, by bisection.
+
+        Above the median the search runs on sf(x) <= 1 - q instead: near q = 1 the CDF rounds
+        to 1 and would lose the tail. 1 - q is exact in floating point for q >= 0.5.
+        """
         if not 0.0 <= q <= 1.0:
             raise ValueError(f"q must be in [0, 1], got {q}")
+        if not (math.isfinite(tol) and tol > 0):
+            raise ValueError(f"tol must be a positive finite number, got {tol}")
+        if q == 0.0:
+            return 0.0
+        if q == 1.0:
+            return 1.0
+
+        if q <= 0.5:
+
+            def too_small(x: float) -> bool:
+                return self.cdf(x) < q
+        else:
+            tail = 1.0 - q
+
+            def too_small(x: float) -> bool:
+                return self.sf(x) > tail
+
         lo, hi = 0.0, 1.0
-        while hi - lo > tol:
+        for _ in range(max_iter):
+            if hi - lo <= tol:
+                break
             mid = (lo + hi) / 2
-            if self.cdf(mid) < q:
+            if mid <= lo or mid >= hi:
+                break  # interval is already as narrow as floats allow
+            if too_small(mid):
                 lo = mid
             else:
                 hi = mid
