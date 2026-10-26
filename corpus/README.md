@@ -1,0 +1,40 @@
+# Terminal-Bench 2.0 catalogue
+
+`terminal-bench-2.csv` contains 89 task directories from the public [Terminal-Bench 2 repository snapshot](https://github.com/harbor-framework/terminal-bench-2/tree/2fd12b88aafdd04a52c298e3940bcb189f9766d6), commit `2fd12b88aafdd04a52c298e3940bcb189f9766d6`, downloaded on **2026-10-26**. This is the repository snapshot used for these local runs; it is not a claim that today's live `terminal-bench@2.0` registry resolves to that commit. Source checkout: `/Users/danil/hackproof-vendor/terminal-bench-2`. All source URLs in this catalogue were accessed on 2026-10-26. Per-task `task.toml` URLs were opened and matched against the local files; the access log is `codex/out/04-runs/catalogue-source-access.json`.
+
+| Column | Meaning |
+|---|---|
+| `task_id` | Task directory name, without the `terminal-bench/` namespace. |
+| `category`, `difficulty` | Author-provided `metadata` values in `task.toml`; not independently calibrated. |
+| `base_image` | Literal `FROM` image(s) in `environment/Dockerfile`, separated by semicolons. This differs from the prebuilt execution image, recorded as `declared_image` in notes. |
+| `image_arch` | Architecture from local `docker image inspect` of that declared prebuilt image for sampled tasks; otherwise `unknown`. It does not describe every architecture a base tag might support. |
+| `has_solution` | Whether `solution/solve.sh` exists; existence does not establish correctness. |
+| `verifier_kind` | Verifier framework invoked by `tests/test.sh`: `pytest`, `script`, `llm_judge`, or `other`. All 89 entry scripts invoke pytest. This is a source classification, not a proof of every transitive dependency's behavior. |
+| `multi_container` | `yes` for more than one service in a checked-in environment Compose file; `no` where no such multi-service definition exists. A service running inside one container is still `no`. |
+| `network_needed` | `yes` when the provided build, solution, or verifier contains dependency/download commands; otherwise `unknown`. This describes the provided workflow, not a proven inability to run after preparing an offline mirror/cache. Network permission alone is not evidence of necessity. |
+| `tests_in_image` | `unknown` unless image contents establish presence/absence. Source staging rules and a clean Dockerfile do not establish what is inside a prebuilt image. No complete filesystem inspection was performed. |
+| `license` | `Apache-2.0` from the snapshot's [repository LICENSE](https://raw.githubusercontent.com/harbor-framework/terminal-bench-2/2fd12b88aafdd04a52c298e3940bcb189f9766d6/LICENSE), accessed 2026-10-26. This does not determine licenses for base images, downloaded software, weights, or embedded third-party assets; those remain UNVERIFIED. |
+| `notes` | Declared execution image, immutable task source URL, access date, network evidence, license scope, and measured architecture provenance where available. |
+
+Unknown values are intentional. Five sampled tasks were run; the other 84 were catalogued without executing them. Reports and raw results are in `docs/research/local-run-report.md` and `codex/out/04-runs/`. Emulation timings have no native-architecture control and cannot quantify an emulation slowdown factor.
+
+# Prime Environments Hub catalogue (Task 05)
+
+`prime-hub.csv` is a **50-entry public Hub snapshot ranked by stars descending**, accessed **2026-10-26**. The [public API request](https://api.primeintellect.ai/api/v1/environmentshub/?sort_by=stars&sort_order=desc&limit=50&offset=0&visibility=PUBLIC) returned 1,849 public entries; this catalogue keeps the first 50 in server order (including ties). Stars measure bookmarking interest, not installations or active use. The [official Prime CLI source](https://github.com/PrimeIntellect-ai/prime/blob/933c0309cdfe10bda26d4ac01a14f42eb60c05ff/packages/prime/src/prime_cli/commands/env.py), opened 2026-10-26, documents the public list and version-metadata request paths. It was cloned at commit `933c0309cdfe10bda26d4ac01a14f42eb60c05ff`.
+
+Every row's `notes` includes its **version-metadata URL actually retrieved**, access date, rank, archive SHA-256, and the source file used for manual classification. All 50 archives were downloaded from the URLs returned by those metadata requests and matched their reported SHA-256. Raw ranking, sanitized version metadata, archives, extracted source text, and access logs are retained outside the repository under `/Users/danil/hackproof-vendor/prime-hub-05/`. Archives were read as data; no bulk environment installation or execution was performed. Only the reverse-text package was installed and run using a deterministic stub; see `docs/research/verifiers-internals.md`.
+
+| Column | Definition / limitations |
+|---|---|
+| `env_id`, `author` | Exact owner/name and owner slug returned by the API. Owner is not an independently verified legal author identity. Preserve owners: different authors publish packages with identical names. |
+| `version` | `latest_version` at snapshot time, used explicitly for the metadata/archive request. Internal source versions can disagree; e.g. `will/wiki-search` archive pyproject says 0.1.24 while the selected Hub version is 0.1.23. |
+| `kind` | Dominant default behavior from source. `sandbox` takes precedence over turn count where code/submissions execute in container/managed runtime; `tool` otherwise takes precedence over `multi_turn`. `single_turn` can still execute host-side checking code. A label is not a security assurance. |
+| `reward_kind` | `exact_match` for sole positive equality reward; `programmatic` for deterministic/symbolic, numerical, state, format or execution checks; `llm_judge` for model-based assessment; `mixed` combines programmatic and LLM judging. Local classifiers count as programmatic; likelihood-based language-model scoring is called `llm_judge` with an explicit note. Zero-weight diagnostics do not change the category. `UNVERIFIED` for the unaudited task-dependent verifier mix in frontier-swe. |
+| `needs_api_key` | `yes` for extra credentials required by the reviewed default environment, reward/user simulator, or managed runtime, excluding the replaceable solver endpoint. Includes HUD keys and Modal tokens. `no` means the reviewed path has no additional real-key requirement with a local/stub solver; it does not promise offline data, zero compute cost, compatibility, or absence of transitive requirements. Optional external services are noted. Plain v1 tasksets are classified separately from the evaluation runtime the caller chooses. |
+| `downloads_or_stars` | **Stars**, integer, from the one ranking response; no download/install counts are mixed in. |
+| `license` | Explicit version-metadata or root package-manifest license; otherwise `UNVERIFIED` (41 entries). No inference from upstream dataset/framework licenses; all transitive assets remain outside this assertion. |
+| `repo_url` | An environment-specific source repository/path declared in the source, opened successfully on 2026-10-26. Broader explicitly declared wrapper repositories may be used with package evidence. Missing/unconfirmed links are `UNVERIFIED` (40 entries), including six declared paths returning HTTP 404; broken declared URLs remain in notes. Dataset/library URLs and user profiles are not substituted. These are mutable upstream URLs; the reviewed archive hash remains the exact provenance. |
+| `last_updated` | Literal Hub `updated_at` field, preserving its timestamp without inventing a timezone. This is Hub metadata, not independently verified last code change. |
+| `notes` | Per-row provenance, evidence path, optional dependencies, metadata/code disagreements, limitations. `hub_runtime` is preserved as reported and is not used as proof of API compatibility. |
+
+Classification is source review, not successful execution of all 50 environments. Descriptions of defect-related packages remain at the class level. No model calls, paid services, real API keys, commits, pushes, issues or PRs were used. The census's 21 single-turn / 3 multi-turn / 12 tool / 14 sandbox counts describe these 50 rows under the rules above.
