@@ -18,6 +18,20 @@
 
 Unknown values are intentional. Five sampled tasks were run; the other 84 were catalogued without executing them. Reports and raw results are in `docs/research/local-run-report.md` and `codex/out/04-runs/`. Emulation timings have no native-architecture control and cannot quantify an emulation slowdown factor.
 
+## Configuration census (Task 09)
+
+The following columns were appended without changing existing cell values or row order. Task configuration URLs already recorded in each row were reopened on **2026-10-26** and matched byte-for-byte against the pinned source checkout. [Census methodology, registry evidence, counts, and laptop shortlist](../docs/research/corpus-census.md) distinguish configured values from runtime observations. No task, build, solution, verifier, or test suite was executed for this census.
+
+| Column | Definition / limitations |
+|---|---|
+| `verifier_mode` | Effective task-level `shared` / `separate` under the pinned Harbor resolver: explicit mode first, otherwise a declared verifier environment implies separate, otherwise shared. `unknown` is reserved for unresolved/invalid/mixed configurations. All 89 are single-step and resolve shared. A Dockerfile under tests alone does not select separate mode. |
+| `agent_user`, `verifier_user` | Literal phase `user` setting, stringified if numeric; `default` when omitted. Default means the execution image/Compose user, not a verified root/nonroot identity. |
+| `network_policy` | Task-declared network settings, preserving legacy spelling: all rows explicitly set `environment.allow_internet = true`, recorded as `allow_internet=true`. None sets `network_mode`, `allowed_hosts`, or phase overrides. The reviewed Harbor schema defaults the baseline to public; this column is not a measurement of enforcement. `default` would denote no task-level network declaration. |
+| `agent_timeout_sec`, `verifier_timeout_sec` | Literal configured seconds; empty when omitted, without filling schema/runtime defaults. All 89 explicitly set both. Runtime overrides/multipliers and setup/build time can change total duration. |
+| `arm64_available` | `yes` when every literal Dockerfile base image in `base_image` has a registry-index descriptor for `linux/arm64`; `no` when a checked complete index excludes it; `unknown` for failed/inconclusive checks. Duplicate bases count once for evidence. All seven distinct tags qualified on 2026-10-26. This describes base tags, not the declared prebuilt execution image, dependency compatibility, or successful native execution. |
+
+These definitions follow [Harbor mode resolution](https://raw.githubusercontent.com/harbor-framework/harbor/872da9479f4a2078142d22c49c9ffae0f09e2e63/src/harbor/models/task/verifier_mode.py) and [configuration schema](https://raw.githubusercontent.com/harbor-framework/harbor/872da9479f4a2078142d22c49c9ffae0f09e2e63/src/harbor/models/task/config.py), both opened and matched against the local checkout on 2026-10-26. Registry tag observations are time-specific; ARM64 child manifest digests and per-task size evidence are recorded in the census.
+
 # Prime Environments Hub catalogue (Task 05)
 
 `prime-hub.csv` is a **50-entry public Hub snapshot ranked by stars descending**, accessed **2026-10-26**. The [public API request](https://api.primeintellect.ai/api/v1/environmentshub/?sort_by=stars&sort_order=desc&limit=50&offset=0&visibility=PUBLIC) returned 1,849 public entries; this catalogue keeps the first 50 in server order (including ties). Stars measure bookmarking interest, not installations or active use. The [official Prime CLI source](https://github.com/PrimeIntellect-ai/prime/blob/933c0309cdfe10bda26d4ac01a14f42eb60c05ff/packages/prime/src/prime_cli/commands/env.py), opened 2026-10-26, documents the public list and version-metadata request paths. It was cloned at commit `933c0309cdfe10bda26d4ac01a14f42eb60c05ff`.
