@@ -76,6 +76,50 @@ def test_beta_quantile_inverts_cdf():
     assert BetaPosterior(1, 1).quantile(0.3) == pytest.approx(0.3, abs=1e-8)
 
 
+def test_beta_sf_complements_cdf():
+    # Beta(2, 3) at 0.5: cdf = 11/16, so sf = 5/16.
+    post = BetaPosterior(2, 3)
+    assert post.sf(0.5) == pytest.approx(5 / 16)
+    assert post.cdf(0.3) + post.sf(0.3) == pytest.approx(1.0)
+
+
+def test_beta_upper_tail_quantile_uses_survival_function():
+    # Beta(b, 1) has cdf x^b, so the q-quantile is q^(1/b) exactly.
+    post = BetaPosterior(5, 1)
+    q = 1 - 1e-12
+    assert post.quantile(q) == pytest.approx(q ** (1 / 5), abs=1e-9)
+    assert post.quantile(0.999) == pytest.approx(0.999 ** (1 / 5), abs=1e-9)
+
+
+@pytest.mark.parametrize(("q", "expected"), [(0.0, 0.0), (1.0, 1.0)])
+def test_beta_quantile_endpoints_are_exact(q, expected):
+    assert BetaPosterior(1, 500).quantile(q) == expected
+
+
+@pytest.mark.parametrize("tol", [0, -1, math.inf, math.nan])
+def test_beta_quantile_rejects_bad_tolerance(tol):
+    with pytest.raises(ValueError, match="tol"):
+        BetaPosterior(2, 3).quantile(0.5, tol=tol)
+
+
+def test_beta_quantile_terminates_for_sub_ulp_tolerance():
+    assert BetaPosterior(2, 3).quantile(0.5, tol=1e-30) == pytest.approx(
+        BetaPosterior(2, 3).quantile(0.5), abs=1e-9
+    )
+
+
+@pytest.mark.parametrize("value", [1.5, math.nan, math.inf, True])
+def test_beta_rejects_non_integer_parameters(value):
+    with pytest.raises(TypeError):
+        BetaPosterior(value, 2)
+
+
+@pytest.mark.parametrize("z", [0, -1.96, math.inf, math.nan])
+def test_wilson_rejects_bad_z(z):
+    with pytest.raises(ValueError, match="z"):
+        wilson_interval(5, 10, z=z)
+
+
 def test_beta_posterior_mean_and_interval():
     post = BetaPosterior.from_counts(3, 10)
     assert (post.alpha, post.beta) == (4, 8)
