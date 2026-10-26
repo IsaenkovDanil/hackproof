@@ -10,23 +10,30 @@ Ten relevant wheel source files match byte-for-byte the earlier internals checko
 import asyncio
 from pathlib import Path
 from harbor.models.trial.config import (
-    AgentConfig, EnvironmentConfig, TaskConfig, TrialConfig,
+    AgentConfig,
+    EnvironmentConfig,
+    TaskConfig,
+    TrialConfig,
 )
 from harbor.trial.trial import Trial
 
+
 async def main():
-    trial = await Trial.create(TrialConfig(
-        task=TaskConfig(path=Path('/absolute/path/to/task')),
-        agent=AgentConfig(name='oracle'),  # 'nop' for the baseline
-        environment=EnvironmentConfig(type='docker'),
-        trials_dir=Path('/absolute/output/trials'),
-        trial_name='task--oracle',
-    ))
+    trial = await Trial.create(
+        TrialConfig(
+            task=TaskConfig(path=Path("/absolute/path/to/task")),
+            agent=AgentConfig(name="oracle"),  # 'nop' for the baseline
+            environment=EnvironmentConfig(type="docker"),
+            trials_dir=Path("/absolute/output/trials"),
+            trial_name="task--oracle",
+        )
+    )
     result = await trial.run()
-    Path('/absolute/output/result.json').write_text(result.model_dump_json(indent=2))
+    Path("/absolute/output/result.json").write_text(result.model_dump_json(indent=2))
     print(result.verifier_result, result.exception_info)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     asyncio.run(main())
 ```
 

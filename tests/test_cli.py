@@ -31,6 +31,6 @@ def test_stats_pass_at_k():
     assert "pass@5 = 0.9167" in result.output
 
 
-def test_audit_reports_not_implemented(tmp_path):
+def test_audit_without_tasks_is_a_tool_error(tmp_path):
     result = runner.invoke(app, ["audit", str(tmp_path)])
     assert result.exit_code == 2

@@ -16,13 +16,23 @@ properties a trustworthy task should have and explains how to fix the ones that 
 - the reference solution passes every time;
 - difficulty is calibrated for training.
 
-Status: early. Today Hackproof parses [Harbor](https://docs.harborframework.com) tasks
-(`hackproof inspect`) and ships the statistics the checks will use; `hackproof audit` arrives in
-phase 2. Scope and assumptions: [docs/threat-model.md](docs/threat-model.md).
+Status: early. Two checks run today on [Harbor](https://docs.harborframework.com) tasks
+(the format behind Terminal-Bench 2.0), through Harbor's own trial machinery and Docker:
+
+| Check | Property | Verdicts |
+| --- | --- | --- |
+| `baseline.nop` | A do-nothing agent earns zero reward | fail on any reward; a verifier error never counts as zero |
+| `reference.reliability` | The reference solution passes every time | Wald SPRT on repeated runs: a broken reference fails after ~2 runs, a stable one is confirmed after 31 |
+
+Scope and assumptions: [docs/threat-model.md](docs/threat-model.md).
 
 ```bash
-uv run hackproof inspect tests/fixtures/harbor
+uv sync --extra harbor
+uv run hackproof inspect tests/fixtures/harbor          # parse only, no Docker
+uv run hackproof audit tests/fixtures/harbor --oracle-runs 31
 ```
+
+Each task gets a JSON report in `hackproof-reports/`. Exit code 1 means a check failed.
 
 ## Development
 
