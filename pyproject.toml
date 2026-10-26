@@ -3,7 +3,7 @@ name = "hackproof"
 version = "0.0.1"
 description = "Quality audits for RL environments and benchmark graders"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "typer>=0.12",
 ]
@@ -17,6 +17,11 @@ dev = [
 [project.scripts]
 hackproof = "hackproof.cli:app"
 
+[project.optional-dependencies]
+harbor = [
+    "harbor>=0.25,<0.26",
+]
+
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
@@ -29,7 +34,11 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer declares CLI options through default values; these calls are evaluated once on purpose.
+extend-immutable-calls = ["typer.Option", "typer.Argument", "pathlib.Path"]

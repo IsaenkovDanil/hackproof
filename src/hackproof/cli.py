@@ -73,11 +73,60 @@ def inspect(
     raise typer.Exit(code=1 if failures else 0)
 
 
+def _make_runner(workdir: Path):
+    """Build the execution backend. Tests replace this with a scripted fake."""
+    from hackproof.runners.harbor import HarborRunner
+
+    return HarborRunner(workdir)
+
+
 @app.command()
-def audit(path: Path) -> None:
-    """Audit a task directory (arrives in phase 2 of the roadmap)."""
-    typer.echo(f"audit is not implemented yet; nothing was checked in {path}", err=True)
-    raise typer.Exit(code=2)
+def audit(
+    path: Path,
+    out: Path = typer.Option(Path("hackproof-reports"), help="Directory for JSON reports."),
+    nop_runs: int = typer.Option(2, min=1, help="Runs of the no-op baseline agent (P1)."),
+    oracle_runs: int = typer.Option(
+        31, min=1, help="Maximum reference-solution runs (P5); SPRT stops earlier when decisive."
+    ),
+) -> None:
+    """Run the checks on Harbor tasks at PATH. Exit 1 if any check fails, 2 on tool errors."""
+    from hackproof.checks import check_nop_baseline, check_reference_reliability
+    from hackproof.report import build_report
+    from hackproof.runners.harbor import HarborNotInstalledError
+
+    task_dirs = list(harbor.discover_tasks(path)) if path.is_dir() else []
+    if not task_dirs:
+        typer.echo(f"no Harbor tasks found at {path}", err=True)
+        raise typer.Exit(code=2)
+    try:
+        runner = _make_runner(out)
+    except HarborNotInstalledError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+
+    out.mkdir(parents=True, exist_ok=True)
+    any_fail = tool_error = False
+    for task_dir in task_dirs:
+        try:
+            task = harbor.load_task(task_dir)
+        except TaskFormatError as exc:
+            tool_error = True
+            typer.echo(f"{task_dir.name}: invalid task, skipped ({'; '.join(exc.problems)})")
+            continue
+        checks = [
+            check_nop_baseline(task, runner, runs=nop_runs),
+            check_reference_reliability(task, runner, max_runs=oracle_runs),
+        ]
+        report = build_report(task, checks, runner=runner.name)
+        report_path = out / f"{task.id}.json"
+        report_path.write_text(json.dumps(report, indent=2) + "\n")
+        typer.echo(f"{task.id}: {report['summary']['verdict']}  ({report_path})")
+        for check in checks:
+            typer.echo(f"  [{check.verdict.value:>7}] {check.property} {check.id}: {check.summary}")
+            if check.fix and check.verdict.value in ("fail", "warn"):
+                typer.echo(f"            fix: {check.fix}")
+        any_fail |= report["summary"]["verdict"] == "fail"
+    raise typer.Exit(code=1 if any_fail else 2 if tool_error else 0)
 
 
 @stats_app.command("wilson")

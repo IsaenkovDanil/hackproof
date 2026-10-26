@@ -8,3 +8,6 @@ build/
 
 # Codex task prompts and private outputs (local only)
 codex/
+
+# Audit outputs
+hackproof-reports/
