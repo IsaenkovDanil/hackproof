@@ -7,8 +7,10 @@ from hackproof.stats import (
     BetaPosterior,
     Decision,
     FlakeVerdict,
+    SequentialDesign,
     flake_verdict,
     pass_at_k,
+    sequential_interval,
     wilson_interval,
 )
 
@@ -176,3 +178,47 @@ def test_sprt_validates_parameters(kwargs, message):
 )
 def test_flake_verdict(failures, n, verdict):
     assert flake_verdict(failures, n) is verdict
+
+
+# --- exact intervals after sequential stopping --------------------------------------
+
+
+def _fixed_design(n):
+    # p0 and p1 so close that the SPRT can never decide within n runs: a fixed-n experiment.
+    return SequentialDesign(BernoulliSPRT(0.30, 0.31), max_n=n)
+
+
+def test_sequential_interval_reduces_to_clopper_pearson():
+    design = _fixed_design(10)
+    assert sorted(design.stopping_counts()) == [(10, k) for k in range(11)]
+    # Clopper-Pearson for 0/10: upper = 1 - 0.025^(1/10).
+    assert sequential_interval(design, 10, 0) == pytest.approx((0.0, 1 - 0.025**0.1), abs=1e-8)
+    # Clopper-Pearson for 3/10 (tabulated): [0.06674, 0.65245].
+    low, high = sequential_interval(design, 10, 3)
+    assert low == pytest.approx(0.06674, abs=5e-5)
+    assert high == pytest.approx(0.65245, abs=5e-5)
+
+
+def test_stopping_states_hold_all_probability():
+    design = SequentialDesign(BernoulliSPRT(0.01, 0.10), max_n=31)
+    for p in (0.02, 0.3, 0.9):
+        assert math.fsum(design.probabilities(p).values()) == pytest.approx(1.0, abs=1e-12)
+    # Early stop after two failures, and acceptance of H0 after 31 clean runs.
+    counts = design.stopping_counts()
+    assert counts[(2, 2)] == 1
+    assert counts[(31, 0)] == 1
+
+
+def test_sequential_interval_keeps_nominal_coverage():
+    design = SequentialDesign(BernoulliSPRT(0.01, 0.10), max_n=31)
+    states = design.stopping_counts()
+    intervals = {s: sequential_interval(design, *s) for s in states}
+    for p in (0.001, 0.01, 0.03, 0.05, 0.1, 0.15, 0.2, 0.4, 0.6, 0.9):
+        probs = design.probabilities(p)
+        coverage = math.fsum(probs[s] for s in states if intervals[s][0] <= p <= intervals[s][1])
+        assert coverage >= 0.95, (p, coverage)
+
+
+def test_sequential_interval_rejects_non_stopping_state():
+    with pytest.raises(ValueError, match="stopping state"):
+        sequential_interval(SequentialDesign(BernoulliSPRT(0.01, 0.10), max_n=31), 5, 0)
