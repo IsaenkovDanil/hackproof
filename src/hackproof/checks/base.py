@@ -31,13 +31,30 @@ class CheckResult:
     summary: str
     evidence: dict[str, Any] = field(default_factory=dict)
     fix: str | None = None
+    # True when execution errors, not the task's behaviour, kept the check from deciding.
+    incomplete: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "property": self.property,
             "verdict": self.verdict.value,
+            "incomplete": self.incomplete,
             "summary": self.summary,
             "evidence": self.evidence,
             "fix": self.fix,
         }
+
+
+def run_record(result) -> dict[str, Any]:
+    """Per-trial provenance kept in check evidence."""
+    return {
+        "agent": result.agent,
+        "attempt": result.attempt,
+        "reward": result.reward,
+        "valid": result.counted,
+        "error": result.error,
+        "duration_sec": round(result.duration_sec, 3) if result.duration_sec else None,
+        "verifier_mode": result.verifier_mode,
+        "trial_dir": str(result.trial_dir) if result.trial_dir else None,
+    }

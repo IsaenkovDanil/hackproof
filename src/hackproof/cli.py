@@ -73,11 +73,15 @@ def inspect(
     raise typer.Exit(code=1 if failures else 0)
 
 
-def _make_runner(workdir: Path):
+def _make_runner(workdir: Path, *, default_agent_timeout_sec: float, min_trial_deadline_sec: float):
     """Build the execution backend. Tests replace this with a scripted fake."""
     from hackproof.runners.harbor import HarborRunner
 
-    return HarborRunner(workdir)
+    return HarborRunner(
+        workdir,
+        default_agent_timeout_sec=default_agent_timeout_sec,
+        min_trial_deadline_sec=min_trial_deadline_sec,
+    )
 
 
 @app.command()
@@ -88,8 +92,21 @@ def audit(
     oracle_runs: int = typer.Option(
         31, min=1, help="Maximum reference-solution runs (P5); SPRT stops earlier when decisive."
     ),
+    default_agent_timeout: float = typer.Option(
+        1800, min=1, help="Agent time limit (s) for tasks that declare none."
+    ),
+    trial_deadline: float = typer.Option(
+        3600,
+        min=1,
+        help="Wall-clock limit (s) per trial, raised automatically if the task's own limits "
+        "need longer, so it never cuts a run the task allows.",
+    ),
 ) -> None:
-    """Run the checks on Harbor tasks at PATH. Exit 1 if any check fails, 2 on tool errors."""
+    """Run the checks on Harbor tasks at PATH.
+
+    Exit codes: 1 if any check fails; otherwise 2 if a task was invalid or execution errors kept
+    a check from deciding; 0 otherwise. A failing check takes precedence because it is a finding.
+    """
     from hackproof.checks import check_nop_baseline, check_reference_reliability
     from hackproof.report import build_report
     from hackproof.runners.harbor import HarborNotInstalledError
@@ -99,7 +116,11 @@ def audit(
         typer.echo(f"no Harbor tasks found at {path}", err=True)
         raise typer.Exit(code=2)
     try:
-        runner = _make_runner(out)
+        runner = _make_runner(
+            out,
+            default_agent_timeout_sec=default_agent_timeout,
+            min_trial_deadline_sec=trial_deadline,
+        )
     except HarborNotInstalledError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from exc
@@ -120,12 +141,15 @@ def audit(
         report = build_report(task, checks, runner=runner.name)
         report_path = out / f"{task.id}.json"
         report_path.write_text(json.dumps(report, indent=2) + "\n")
-        typer.echo(f"{task.id}: {report['summary']['verdict']}  ({report_path})")
+        incomplete = report["summary"]["incomplete"]
+        note = "  INCOMPLETE: execution errors" if incomplete else ""
+        typer.echo(f"{task.id}: {report['summary']['verdict']}{note}  ({report_path})")
         for check in checks:
             typer.echo(f"  [{check.verdict.value:>7}] {check.property} {check.id}: {check.summary}")
             if check.fix and check.verdict.value in ("fail", "warn"):
                 typer.echo(f"            fix: {check.fix}")
         any_fail |= report["summary"]["verdict"] == "fail"
+        tool_error |= incomplete
     raise typer.Exit(code=1 if any_fail else 2 if tool_error else 0)
 
 

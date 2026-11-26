@@ -180,7 +180,6 @@ class BernoulliSPRT:
     p1: float
     alpha: float = 0.05
     beta: float = 0.05
-    llr: float = 0.0
     n: int = 0
     events: int = 0
 
@@ -202,22 +201,118 @@ class BernoulliSPRT:
     def lower(self) -> float:
         return math.log(self.beta / (1 - self.alpha))
 
+    def llr_at(self, n: int, events: int) -> float:
+        """Log-likelihood ratio after `events` events in `n` observations.
+
+        Computed from the counts rather than accumulated step by step, so every path to the
+        same (n, events) gets bit-identical values and `SequentialDesign` agrees with `update`.
+        """
+        return events * math.log(self.p1 / self.p0) + (n - events) * math.log(
+            (1 - self.p1) / (1 - self.p0)
+        )
+
     @property
-    def decision(self) -> Decision:
-        if self.llr >= self.upper:
+    def llr(self) -> float:
+        return self.llr_at(self.n, self.events)
+
+    def decision_at(self, n: int, events: int) -> Decision:
+        llr = self.llr_at(n, events)
+        if llr >= self.upper:
             return Decision.ACCEPT_H1
-        if self.llr <= self.lower:
+        if llr <= self.lower:
             return Decision.ACCEPT_H0
         return Decision.CONTINUE
 
+    @property
+    def decision(self) -> Decision:
+        return self.decision_at(self.n, self.events)
+
     def update(self, event: bool) -> Decision:
-        if event:
-            self.llr += math.log(self.p1 / self.p0)
-            self.events += 1
-        else:
-            self.llr += math.log((1 - self.p1) / (1 - self.p0))
         self.n += 1
+        self.events += int(event)
         return self.decision
+
+
+@dataclass(frozen=True)
+class SequentialDesign:
+    """An SPRT truncated after `max_n` observations, as a finite set of stopping states.
+
+    Every path of events stops at some state (n, k): k events in n observations. Paths that
+    reach the same state have the same probability p^k (1 - p)^(n - k), so the design is fully
+    described by how many paths stop at each state. That makes exact inference possible after a
+    data-dependent stop, where fixed-n intervals such as Wilson's lose their stated coverage.
+    """
+
+    sprt: BernoulliSPRT
+    max_n: int
+
+    def __post_init__(self) -> None:
+        if self.max_n < 1:
+            raise ValueError(f"max_n must be >= 1, got {self.max_n}")
+
+    def stops(self, n: int, events: int) -> bool:
+        return n >= self.max_n or self.sprt.decision_at(n, events) is not Decision.CONTINUE
+
+    def stopping_counts(self) -> dict[tuple[int, int], int]:
+        """Number of event paths that stop at each (n, k)."""
+        stopped: dict[tuple[int, int], int] = {}
+        frontier = {0: 1}  # events -> paths still running at the current n
+        for n in range(1, self.max_n + 1):
+            following: dict[int, int] = {}
+            for k, paths in frontier.items():
+                for k_next in (k, k + 1):
+                    if self.stops(n, k_next):
+                        stopped[(n, k_next)] = stopped.get((n, k_next), 0) + paths
+                    else:
+                        following[k_next] = following.get(k_next, 0) + paths
+            frontier = following
+        return stopped
+
+    def probabilities(self, p: float) -> dict[tuple[int, int], float]:
+        """P(stop at (n, k)) for event probability p in (0, 1)."""
+        return {
+            (n, k): math.exp(math.log(paths) + k * math.log(p) + (n - k) * math.log1p(-p))
+            for (n, k), paths in self.stopping_counts().items()
+        }
+
+
+def sequential_interval(
+    design: SequentialDesign, n: int, events: int, mass: float = 0.95, tol: float = 1e-10
+) -> tuple[float, float]:
+    """Exact confidence interval for p after the design stopped at (n, events).
+
+    Clopper-Pearson-style inversion over the design's stopping states, ordered by the observed
+    rate k/n: the upper bound is the largest p under which a rate at most as high as the
+    observed one still has probability above (1 - mass) / 2, and symmetrically for the lower
+    bound. Ties in rate count toward both tails, which keeps the interval conservative.
+    """
+    if (n, events) not in design.stopping_counts():
+        raise ValueError(f"({n}, {events}) is not a stopping state of this design")
+    if not 0.0 < mass < 1.0:
+        raise ValueError(f"mass must be in (0, 1), got {mass}")
+    tail = (1.0 - mass) / 2
+    rate = events / n
+    states = list(design.stopping_counts())
+
+    def prob_rate(p: float, keep) -> float:
+        probs = design.probabilities(p)
+        return math.fsum(probs[s] for s in states if keep(s[1] / s[0]))
+
+    def crossing(fn, increasing: bool) -> float:
+        lo, hi = 0.0, 1.0
+        while hi - lo > tol:
+            mid = (lo + hi) / 2
+            if mid <= lo or mid >= hi:
+                break
+            if (fn(mid) > tail) != increasing:
+                lo = mid
+            else:
+                hi = mid
+        return lo if increasing else hi
+
+    low = 0.0 if events == 0 else crossing(lambda p: prob_rate(p, lambda r: r >= rate), True)
+    high = 1.0 if events == n else crossing(lambda p: prob_rate(p, lambda r: r <= rate), False)
+    return low, high
 
 
 class FlakeVerdict(StrEnum):

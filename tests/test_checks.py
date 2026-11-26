@@ -61,8 +61,8 @@ def test_stable_reference_needs_31_runs(task):
 def test_too_few_clean_runs_is_unknown(task):
     result = check_reference_reliability(task, ScriptedRunner({"oracle": [1]}), max_runs=5)
     assert result.verdict is Verdict.UNKNOWN
-    # Wilson upper bound for 0 failures in 5 runs.
-    assert result.evidence["failure_rate_ci95"] == [0.0, 0.4345]
+    # Exact bound for 0 failures in 5 runs: (1 - p)^5 = 0.025, as in Clopper-Pearson.
+    assert result.evidence["failure_rate_ci95"] == [0.0, 0.5218]
 
 
 def test_broken_reference_fails_after_two_runs(task):
@@ -114,6 +114,7 @@ def test_report_shape(task):
     assert report["summary"] == {
         "verdict": "fail",
         "counts": {"ok": 1, "warn": 0, "fail": 1, "unknown": 0},
+        "incomplete": False,
     }
     json.dumps(report)  # serialisable
 
@@ -126,7 +127,7 @@ def test_report_shape(task):
     ],
 )
 def test_cli_audit(monkeypatch, tmp_path, scripts, exit_code, verdict):
-    monkeypatch.setattr(cli, "_make_runner", lambda workdir: ScriptedRunner(scripts))
+    monkeypatch.setattr(cli, "_make_runner", lambda workdir, **kw: ScriptedRunner(scripts))
     out = tmp_path / "reports"
     result = CliRunner().invoke(
         cli.app, ["audit", str(COUNT_LINES), "--out", str(out), "--oracle-runs", "3"]
@@ -135,3 +136,60 @@ def test_cli_audit(monkeypatch, tmp_path, scripts, exit_code, verdict):
     report = json.loads((out / "count-lines.json").read_text())
     assert report["summary"]["verdict"] == verdict
     assert "baseline.nop" in result.output
+
+
+# --- regressions from the independent review (codex/out/11-review.md) --------------
+
+
+def test_verifier_error_then_clean_passes_is_warn_not_ok(task):
+    # Finding 1: one invalid attempt followed by 31 clean passes used to report OK.
+    runner = ScriptedRunner({"oracle": [ERROR] + [1] * 31})
+    result = check_reference_reliability(task, runner, max_runs=32)
+    assert result.verdict is Verdict.WARN
+    assert result.evidence["invalid_runs"] == 1
+    assert result.evidence["graded_runs"] == 31
+    assert "without a valid grade" in result.summary
+
+
+def test_all_invalid_audit_exits_2(monkeypatch, tmp_path):
+    # Finding 2: an audit in which nothing was graded used to exit 0.
+    scripts = {"nop": [ERROR], "oracle": [ERROR]}
+    monkeypatch.setattr(cli, "_make_runner", lambda workdir, **kw: ScriptedRunner(scripts))
+    out = tmp_path / "reports"
+    result = CliRunner().invoke(cli.app, ["audit", str(COUNT_LINES), "--out", str(out)])
+    assert result.exit_code == 2, result.output
+    report = json.loads((out / "count-lines.json").read_text())
+    assert report["summary"]["incomplete"] is True
+    assert "INCOMPLETE" in result.output
+
+
+def test_failure_outranks_incomplete_for_exit_code(monkeypatch, tmp_path):
+    scripts = {"nop": [1], "oracle": [ERROR]}
+    monkeypatch.setattr(cli, "_make_runner", lambda workdir, **kw: ScriptedRunner(scripts))
+    result = CliRunner().invoke(cli.app, ["audit", str(COUNT_LINES), "--out", str(tmp_path / "r")])
+    assert result.exit_code == 1
+
+
+def test_reported_interval_is_exact_for_the_stopping_rule(task):
+    # Finding 3: the interval must account for SPRT stopping. Two failures stop the test at
+    # n = 2; the exact lower bound solves P(two failures in the first two runs) = 0.025.
+    result = check_reference_reliability(task, ScriptedRunner({"oracle": [0]}), max_runs=31)
+    low, high = result.evidence["failure_rate_ci95"]
+    assert low == pytest.approx(0.025**0.5, abs=1e-4)
+    assert high == 1.0
+    assert "exact" in result.evidence["ci_method"]
+
+
+def test_runs_are_recorded_with_provenance(task):
+    result = check_nop_baseline(task, ScriptedRunner({"nop": [0]}), runs=1)
+    (run,) = result.evidence["runs"]
+    assert run == {
+        "agent": "nop",
+        "attempt": 0,
+        "reward": 0.0,
+        "valid": True,
+        "error": None,
+        "duration_sec": None,
+        "verifier_mode": "shared",
+        "trial_dir": None,
+    }

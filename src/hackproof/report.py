@@ -23,5 +23,7 @@ def build_report(task: Task, checks: list[CheckResult], *, runner: str) -> dict[
         "summary": {
             "verdict": worst(c.verdict for c in checks).value,
             "counts": {v.value: counts.get(v.value, 0) for v in Verdict},
+            # Execution errors prevented at least one check from deciding.
+            "incomplete": any(c.incomplete for c in checks),
         },
     }

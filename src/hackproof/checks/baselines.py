@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hackproof.checks.base import CheckResult, Verdict
+from hackproof.checks.base import CheckResult, Verdict, run_record
 from hackproof.model import Task
 from hackproof.runners.base import NOP, Runner
 
@@ -17,7 +17,7 @@ def check_nop_baseline(task: Task, runner: Runner, *, runs: int = 2) -> CheckRes
     counted = [r for r in results if r.counted]
     errors = [r.error for r in results if not r.counted]
     evidence = {
-        "runs": runs,
+        "runs": [run_record(r) for r in results],
         "rewards": [r.reward for r in counted],
         "errors": errors,
     }
@@ -45,6 +45,7 @@ def check_nop_baseline(task: Task, runner: Runner, *, runs: int = 2) -> CheckRes
             verdict=Verdict.UNKNOWN,
             summary=f"no no-op run produced a valid reward ({len(errors)} errors)",
             evidence=evidence,
+            incomplete=True,
         )
     if errors:
         return CheckResult(
